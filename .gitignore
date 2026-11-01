@@ -1,0 +1,8 @@
+venv/
+__pycache__/
+*.pyc
+*.db
+groq_key.txt
+mail.txt
+.env
+.vscode/
