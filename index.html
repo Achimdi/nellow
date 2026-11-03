@@ -223,7 +223,7 @@ dialog textarea{min-height:140px;resize:vertical}.dact{display:flex;gap:10px;jus
   </div>
   <main>
     <section class="sec reveal"><h2>Watch it work</h2><div class="console tilt" id="cons"><div class="bar"><i class="led"></i><span id="cstate">IDLE</span></div><pre id="clog" aria-live="polite"></pre></div><p><button class="ghost" id="creplay" type="button">Replay</button></p></section>
-    <section class="sec reveal"><h2>Four gears</h2><div class="seg" role="group" aria-label="Modes"><button type="button" data-m="fast">Fast</button><button type="button" data-m="balanced">Balanced</button><button type="button" data-m="thorough">Thorough</button><button type="button" data-m="turbo">Turbo</button></div><div class="readout"><pre id="mread"></pre></div></section>
+    <section class="sec reveal"><h2>Three gears</h2><div class="seg" role="group" aria-label="Modes"><button type="button" data-m="balanced">Balanced</button><button type="button" data-m="thorough">Thorough</button><button type="button" data-m="turbo">Turbo</button></div><div class="readout"><pre id="mread"></pre></div></section>
     <section class="sec closing reveal"><h2>Put it to work</h2><button class="primary magnetic" id="ccta" type="button">Create your account</button></section>
   </main>
   <footer class="lfoot">NELLOW / PRECISION INTELLIGENCE</footer>
@@ -265,7 +265,6 @@ dialog textarea{min-height:140px;resize:vertical}.dact{display:flex;gap:10px;jus
       <button type="button" class="ico" id="att" title="Attach an image" aria-label="Attach an image"><svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 11.5l-8.6 8.6a5.5 5.5 0 0 1-7.8-7.8l9.2-9.2a3.7 3.7 0 0 1 5.2 5.2l-9.2 9.2a1.8 1.8 0 0 1-2.6-2.6l8.5-8.5"/></svg></button>
       <input type="file" id="file" accept="image/*" hidden>
       <select id="effort" title="How much effort MAZZI puts in">
-        <option value="fast">Fast</option>
         <option value="balanced">Balanced</option>
         <option value="thorough">Thorough</option>
         <option value="turbo">Turbo (cloud)</option>
@@ -724,14 +723,15 @@ dialog textarea{min-height:140px;resize:vertical}.dact{display:flex;gap:10px;jus
     }
     new IntersectionObserver(([e]) => { if (e.isIntersecting) play(); }, { root: L, threshold: .5 }).observe($("#cons"));
     $("#creplay").onclick = play;
-    const INFO = { fast: ["llama 3.2, 3B", "on your machine", "quick answers, fully private"], balanced: ["llama 3.1, 8B", "on your machine", "everyday depth, fully private"], thorough: ["cloud reasoning", "in the cloud", "hard questions, shows its thinking"], turbo: ["cloud, fastest", "in the cloud", "long answers in seconds"] };
+    const INFO = { balanced: ["llama 3.2, 3B", "on your machine", "quick everyday answers, fully private"], thorough: ["cloud reasoning", "in the cloud", "hard questions, shows its thinking"], turbo: ["cloud, fastest", "in the cloud", "long answers in seconds"] };
     document.querySelectorAll(".seg button").forEach(b => { b.onclick = () => {
       document.querySelectorAll(".seg button").forEach(x => x.classList.toggle("on", x === b));
       const i = INFO[b.dataset.m]; $("#mread").textContent = "MODEL     " + i[0] + "\nRUNS      " + i[1] + "\nBEST FOR  " + i[2]; }; });
     document.querySelector('.seg button[data-m="balanced"]').click();
   }
 
-  $("#effort").value = localStorage.getItem("mazzi_effort") || "fast";
+  const savedMode = localStorage.getItem("mazzi_effort");
+  $("#effort").value = ["balanced", "thorough", "turbo"].includes(savedMode) ? savedMode : "turbo";
   $("#effort").onchange = e => localStorage.setItem("mazzi_effort", e.target.value);
   boot();
 </script>

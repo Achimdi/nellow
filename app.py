@@ -18,9 +18,8 @@ app = FastAPI()
 Auth = Header(default="", alias="Authorization")
 
 MODES = {
-    "fast": {"model": "llama3.2:3b", "think": False,
-             "style": " Keep answers short and direct unless the user asks for detail."},
-    "balanced": {"model": S.MODEL, "think": False},
+    "balanced": {"model": "llama3.2:3b", "think": False,
+                 "style": " Keep answers clear and concise."},
     "thorough": {"model": "qwen3:4b", "think": True, "cloud_if_key": True, "effort": "medium"},
     "turbo": {"model": None, "think": False, "cloud": True, "effort": "low"},
 }
@@ -30,7 +29,7 @@ def route(prev, text):
     ctx = "\n".join(f"- {p}" for p in prev) or "- (none)"
     try:
         r = ollama.chat(
-            model=MODES["fast"]["model"],
+            model=MODES["balanced"]["model"],
             messages=[{"role": "system", "content": S.ROUTER_PROMPT},
                       {"role": "user", "content": f"Previous user messages:\n{ctx}\n\nCurrent message: {text}"}],
             options={"temperature": 0, "num_predict": 4},
