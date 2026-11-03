@@ -239,19 +239,10 @@ dialog textarea{min-height:140px;resize:vertical}.dact{display:flex;gap:10px;jus
       <button class="tab" data-m="register" type="button">Create account</button>
     </div>
     <form id="af" style="display:flex;flex-direction:column;gap:10px">
-      <input id="u" placeholder="Username or email" autocomplete="username" required>
-      <input id="e" type="email" placeholder="Email" autocomplete="email" hidden>
-      <input id="p" type="password" placeholder="Password" autocomplete="current-password" required>
+      <input id="u" placeholder="Username" autocomplete="username" required>
+      <input id="p" type="password" placeholder="Password, 6 or more characters" autocomplete="current-password" required>
       <div id="err"></div>
       <button class="primary" id="afgo">Sign in</button>
-    </form>
-    <form id="vf" hidden style="display:flex;flex-direction:column;gap:10px">
-      <p class="mute" id="vmsg"></p>
-      <input id="vc" inputmode="numeric" maxlength="6" placeholder="6-digit code" autocomplete="one-time-code" required>
-      <div id="verr" style="color:#ff8a9b;font-size:13px;min-height:18px"></div>
-      <button class="primary">Verify and continue</button>
-      <button class="ghost" id="vresend" type="button">Send a new code</button>
-      <button class="ghost" id="vback" type="button">Back</button>
     </form>
     <button class="ghost" id="guest" type="button">Continue as guest</button>
     <button class="ghost" id="aback" type="button">Back to overview</button>
@@ -327,8 +318,6 @@ dialog textarea{min-height:140px;resize:vertical}.dact{display:flex;gap:10px;jus
     mode = t.dataset.m;
     document.querySelectorAll(".tab").forEach(x => x.classList.toggle("on", x === t));
     $("#afgo").textContent = mode === "login" ? "Sign in" : "Create account";
-    $("#e").hidden = mode !== "register"; $("#e").required = mode === "register";
-    $("#u").placeholder = mode === "login" ? "Username or email" : "Username";
     $("#err").textContent = "";
   });
   async function enter(path, body) {
@@ -336,35 +325,11 @@ dialog textarea{min-height:140px;resize:vertical}.dact{display:flex;gap:10px;jus
     const r = await fetch(path, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
     const d = await r.json();
     if (!r.ok) { $("#err").textContent = d.detail || "Something went wrong. Try again."; return; }
-    if (d.verify) return showVerify(d.email, body);
     token = d.token; localStorage.setItem("mazzi_token", token); boot();
   }
-  $("#af").onsubmit = e => { e.preventDefault(); enter("/api/" + mode, { name: $("#u").value, password: $("#p").value, email: $("#e").value }); };
+  $("#af").onsubmit = e => { e.preventDefault(); enter("/api/" + mode, { name: $("#u").value, password: $("#p").value }); };
   $("#guest").onclick = () => enter("/api/guest", {});
 
-  let pendingSignup = null;
-  function showVerify(email, body) {
-    pendingSignup = { email, body };
-    $("#af").hidden = true; document.querySelector(".tabs").hidden = true; $("#guest").hidden = true;
-    $("#vf").hidden = false; $("#vc").value = ""; $("#verr").textContent = "";
-    $("#vmsg").textContent = "We sent a 6-digit code to " + email + ". Enter it below. It expires in 10 minutes.";
-    $("#vc").focus();
-  }
-  $("#vback").onclick = () => {
-    $("#vf").hidden = true; $("#af").hidden = false; document.querySelector(".tabs").hidden = false; $("#guest").hidden = false;
-  };
-  $("#vresend").onclick = async () => {
-    const r = await fetch("/api/register", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(pendingSignup.body) });
-    const d = await r.json().catch(() => ({}));
-    $("#verr").textContent = r.ok ? "A new code is on its way." : (d.detail || "Could not send a new code.");
-  };
-  $("#vf").onsubmit = async e => {
-    e.preventDefault();
-    const r = await fetch("/api/verify", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ email: pendingSignup.email, code: $("#vc").value }) });
-    const d = await r.json().catch(() => ({}));
-    if (!r.ok) { $("#verr").textContent = d.detail || "Could not verify. Try again."; return; }
-    token = d.token; localStorage.setItem("mazzi_token", token); boot();
-  };
 
   function signOut(force) {
     if (!force && me && me.guest && !confirm("Guest chats are lost when you leave. Leave anyway?")) return;

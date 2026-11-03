@@ -3,8 +3,6 @@ import json
 import os
 import re
 import secrets
-import smtplib
-from email.message import EmailMessage
 import sqlite3
 import time
 
@@ -141,7 +139,6 @@ with db() as c:
     CREATE TABLE IF NOT EXISTS chats(id INTEGER PRIMARY KEY, user_id INTEGER, title TEXT DEFAULT 'New chat', updated REAL);
     CREATE TABLE IF NOT EXISTS msgs(id INTEGER PRIMARY KEY, chat_id INTEGER, role TEXT, content TEXT, image TEXT, sources TEXT);
     CREATE TABLE IF NOT EXISTS projects(id INTEGER PRIMARY KEY, user_id INTEGER, name TEXT, instructions TEXT DEFAULT '');
-    CREATE TABLE IF NOT EXISTS pending(email TEXT PRIMARY KEY, name TEXT, pw TEXT, code TEXT, expires REAL, tries INTEGER DEFAULT 0);
     """)
     try:
         c.execute("ALTER TABLE chats ADD COLUMN project_id INTEGER")
@@ -197,95 +194,25 @@ class Cred(BaseModel):
     password: str
 
 
-class Reg(Cred):
-    email: str = ""
-
-
-def mail_cfg():
-    try:
-        with open("mail.txt", encoding="utf-8-sig") as f:
-            lines = [x.strip() for x in f.read().splitlines() if x.strip()]
-        if lines[0].lower() == "console":
-            return "console", ""
-        return lines[0], lines[1].replace(" ", "")
-    except Exception:
-        return None
-
-
-def send_code(to, code):
-    cfg = mail_cfg()
-    if not cfg:
-        raise HTTPException(503, "Email sending is not set up yet. Create mail.txt as shown in the setup steps.")
-    sender, pw = cfg
-    if sender == "console":
-        print(f"[Nellow] verification code for {to}: {code}", flush=True)
-        return
-    msg = EmailMessage()
-    msg["Subject"] = "Your Nellow verification code"
-    msg["From"] = f"Nellow <{sender}>"
-    msg["To"] = to
-    msg.set_content(f"Your Nellow verification code is {code}. It expires in 10 minutes.\n\n"
-                    "If you didn’t ask for this, you can ignore this email.")
-    try:
-        with smtplib.SMTP_SSL("smtp.gmail.com", 465, timeout=20) as s:
-            s.login(sender, pw)
-            s.send_message(msg)
-    except Exception as e:
-        raise HTTPException(502, f"Could not send the email: {e}")
-
-
 @app.post("/api/register")
-def register(b: Reg):
+def register(b: Cred):
     name = b.name.strip().lower()
-    email = b.email.strip().lower()
-    if len(name) < 3 or len(b.password) < 6:
-        raise HTTPException(400, "Username needs 3+ characters and password 6+")
-    if not re.fullmatch(r"[^@\s]+@[^@\s]+\.[^@\s]+", email):
-        raise HTTPException(400, "Please enter a valid email address")
-    with db() as c:
-        if c.execute("SELECT 1 FROM users WHERE name=?", (name,)).fetchone():
-            raise HTTPException(400, "That username is taken")
-        if c.execute("SELECT 1 FROM users WHERE email=?", (email,)).fetchone():
-            raise HTTPException(400, "That email is already registered")
-    code = f"{secrets.randbelow(10**6):06d}"
-    send_code(email, code)
-    with db() as c:
-        c.execute("INSERT OR REPLACE INTO pending(email,name,pw,code,expires,tries) VALUES(?,?,?,?,?,0)",
-                  (email, name, hash_pw(b.password), hashlib.sha256(code.encode()).hexdigest(), time.time() + 600))
-    return {"verify": True, "email": email}
-
-
-class Verify(BaseModel):
-    email: str
-    code: str
-
-
-@app.post("/api/verify")
-def verify(b: Verify):
-    email = b.email.strip().lower()
-    with db() as c:
-        p = c.execute("SELECT * FROM pending WHERE email=?", (email,)).fetchone()
-        if not p or p["expires"] < time.time():
-            raise HTTPException(400, "That code has expired. Go back and create the account again.")
-        if p["tries"] >= 5:
-            raise HTTPException(429, "Too many wrong tries. Create the account again to get a new code.")
-        if not secrets.compare_digest(hashlib.sha256(b.code.strip().encode()).hexdigest(), p["code"]):
-            c.execute("UPDATE pending SET tries=tries+1 WHERE email=?", (email,))
-            c.commit()
-            raise HTTPException(400, "Wrong code. Try again.")
-        try:
-            uid = c.execute("INSERT INTO users(name, pw, email) VALUES(?,?,?)", (p["name"], p["pw"], email)).lastrowid
-        except sqlite3.IntegrityError:
-            raise HTTPException(400, "That username was just taken. Create the account again.")
-        c.execute("DELETE FROM pending WHERE email=?", (email,))
+    if not re.fullmatch(r"[a-z0-9_.-]{3,30}", name):
+        raise HTTPException(400, "Username: 3 to 30 letters, numbers, dots, dashes or underscores")
+    if len(b.password) < 6:
+        raise HTTPException(400, "Password needs at least 6 characters")
+    try:
+        with db() as c:
+            uid = c.execute("INSERT INTO users(name, pw) VALUES(?,?)", (name, hash_pw(b.password))).lastrowid
+    except sqlite3.IntegrityError:
+        raise HTTPException(400, "That username is taken")
     return {"token": new_token(uid)}
 
 
 @app.post("/api/login")
 def login(b: Cred):
     with db() as c:
-        n = b.name.strip().lower()
-        u = c.execute("SELECT * FROM users WHERE (name=? OR email=?) AND guest=0", (n, n)).fetchone()
+        u = c.execute("SELECT * FROM users WHERE name=? AND guest=0", (b.name.strip().lower(),)).fetchone()
     if not u or not check_pw(b.password, u["pw"]):
         raise HTTPException(401, "Wrong username or password")
     return {"token": new_token(u["id"])}
