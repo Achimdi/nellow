@@ -8,7 +8,7 @@ import time
 
 import httpx
 import ollama
-from fastapi import FastAPI, Header, HTTPException
+from fastapi import FastAPI, Header, HTTPException, Request
 from fastapi.responses import FileResponse, StreamingResponse
 from pydantic import BaseModel
 
@@ -16,6 +16,24 @@ import server as S  # reuses your search tools, router and models from server.py
 
 app = FastAPI()
 Auth = Header(default="", alias="Authorization")
+
+HITS = {}
+
+
+def too_many(key, limit, window=3600):
+    now = time.time()
+    q = [t for t in HITS.get(key, []) if now - t < window]
+    if len(q) >= limit:
+        HITS[key] = q
+        return True
+    q.append(now)
+    HITS[key] = q
+    return False
+
+
+def client_ip(request):
+    fwd = request.headers.get("x-forwarded-for", "").split(",")[0].strip()
+    return fwd or (request.client.host if request.client else "unknown")
 
 MODES = {
     "balanced": {"model": "llama3.2:3b", "think": False,
@@ -194,7 +212,9 @@ class Cred(BaseModel):
 
 
 @app.post("/api/register")
-def register(b: Cred):
+def register(b: Cred, request: Request):
+    if too_many("reg:" + client_ip(request), 5):
+        raise HTTPException(429, "Too many sign-ups from this network. Please try again later.")
     name = b.name.strip().lower()
     if not re.fullmatch(r"[a-z0-9_.-]{3,30}", name):
         raise HTTPException(400, "Username: 3 to 30 letters, numbers, dots, dashes or underscores")
@@ -209,7 +229,9 @@ def register(b: Cred):
 
 
 @app.post("/api/login")
-def login(b: Cred):
+def login(b: Cred, request: Request):
+    if too_many("login:" + client_ip(request), 20):
+        raise HTTPException(429, "Too many login attempts. Please wait a while and try again.")
     with db() as c:
         u = c.execute("SELECT * FROM users WHERE name=? AND guest=0", (b.name.strip().lower(),)).fetchone()
     if not u or not check_pw(b.password, u["pw"]):
@@ -218,7 +240,9 @@ def login(b: Cred):
 
 
 @app.post("/api/guest")
-def guest():
+def guest(request: Request):
+    if too_many("guest:" + client_ip(request), 10):
+        raise HTTPException(429, "Too many guest sessions from this network. Please try again later.")
     with db() as c:
         uid = c.execute("INSERT INTO users(name, pw, guest) VALUES(?,?,1)", ("guest-" + secrets.token_hex(4), "")).lastrowid
     return {"token": new_token(uid)}
@@ -344,6 +368,8 @@ class Send(BaseModel):
 @app.post("/api/chats/{cid}/send")
 def send(cid: int, b: Send, auth: str = Auth):
     u = user_of(auth)
+    if too_many("msg:%s" % u["id"], 20 if u["guest"] else 60):
+        raise HTTPException(429, "You have reached the hourly message limit. Please try again later.")
     user_msg_id = None
     with db() as c:
         chat = own(c, u, cid)
