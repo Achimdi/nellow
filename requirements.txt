@@ -4,3 +4,4 @@ ollama
 httpx
 ddgs
 trafilatura
+pypdf

@@ -6,3 +6,4 @@ groq_key.txt
 mail.txt
 .env
 .vscode/
+*_key.txt
